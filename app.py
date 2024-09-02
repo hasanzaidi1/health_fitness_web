@@ -1,100 +1,71 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
+import datetime
 from exercises.pullDay import PullDay
 from exercises.pushDay import PushDay
 from exercises.legDay import LegsWorkout
 from exercises.biceps import Biceps
 from exercises.shoulders import Shoulders
-import datetime
+import os
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key"
-
-# Define your workout schedule
-workout_schedule = {
-    "Monday": "Pull Day (Back)",
-    "Tuesday": "Biceps",
-    "Wednesday": "Legs",
-    "Thursday": "Push Day (Chest & Triceps)",
-    "Friday": "Shoulders",
-    "Saturday": "Rest or Cardio",
-    "Sunday": "Abs and Swimming"
-}
-
-# Define a mapping of workouts to their plan methods
-workout_plans = {
-    "Pull Day (Back)": lambda: get_pull_day_plan(),
-    "Push Day (Chest & Triceps)": lambda: get_push_day_plan(),
-    "Legs": lambda: get_legs_day_plan(),
-    "Biceps": lambda: get_biceps_day_plan(),
-    "Shoulders": lambda: get_shoulders_day_plan(),
-}
+app.secret_key = os.urandom(24)  # Securely generated secret key
 
 
-def get_todays_WO_plan():
-    today = datetime.datetime.now().strftime("%A")
-    return workout_schedule.get(today, "Rest or Custom Workout")
+# Define workout plans and their corresponding methods
+def get_todays_workout():
+    day_of_week = datetime.datetime.now().strftime("%A")
+    workout_plans = {
+        "Monday": PullDay(),
+        "Tuesday": Biceps(),
+        "Wednesday": LegsWorkout(),
+        "Thursday": PushDay(),
+        "Friday": Shoulders(),
+        # Add more mappings as needed
+    }
+
+    workout_plan = workout_plans.get(day_of_week, None)
+    if workout_plan:
+        if day_of_week == "Monday":
+            plan = workout_plan.pullDay()
+        elif day_of_week == "Tuesday":
+            plan = workout_plan.bicepDay()
+        elif day_of_week == "Wednesday":
+            plan = workout_plan.legDay()
+        elif day_of_week == "Thursday":
+            plan = workout_plan.pushDay()
+        elif day_of_week == "Friday":
+            plan = workout_plan.shoulderDay()
+        else:
+            plan = {}
+        return day_of_week, plan
+    return day_of_week, {}
+
+
+def is_end_of_day():
+    current_time = datetime.datetime.now().time()
+    return current_time >= datetime.time(9, 30)
 
 
 @app.route('/')
 def index():
-    today = datetime.datetime.now().strftime("%A")
-    workout = get_todays_WO_plan()
+    if is_end_of_day():
+        return redirect(url_for('end_of_day_checkin'))
 
-    if workout in workout_plans:
-        workout_plan = workout_plans[workout]()
-        workout_message = f"Good morning! Today is {today}, and your workout is: {workout} \n\n{workout_plan}"
-    else:
-        workout_message = f"Good morning! Today is {today}, and your workout is: {workout}"
-
-    return render_template('index.html', workout_message=workout_message)
+    today, workout_plan = get_todays_workout()
+    return render_template('index.html', today=today, workout_plan=workout_plan)
 
 
 @app.route('/end_of_day', methods=['GET', 'POST'])
 def end_of_day_checkin():
     if request.method == 'POST':
-        if 'yes' in request.form:
-            flash("Great job! Keep it up!")
-        else:
-            flash("Don't worry, you'll get it next time!")
+        # Handle check-in logic
+        completed_exercises = request.form.getlist('completed')
+        skipped_exercises = request.form.getlist('skipped')
+        flash("Your check-in has been recorded!")
         return redirect(url_for('index'))
 
-    return render_template('end_of_day.html')
-
-
-# Define workout plan functions
-def get_pull_day_plan():
-    workout = PullDay()
-    plan = workout.pullDay()
-    plan_message = "\n".join([f"{key}: {value}" for key, value in plan.items()])
-    return plan_message
-
-
-def get_biceps_day_plan():
-    workout = Biceps()
-    plan = workout.bicepDay()
-    plan_message = "\n".join([f"{key}: {value}" for key, value in plan.items()])
-    return plan_message
-
-
-def get_legs_day_plan():
-    workout = LegsWorkout()
-    plan = workout.legDay()
-    plan_message = "\n".join([f"{key}: {value}" for key, value in plan.items()])
-    return plan_message
-
-
-def get_push_day_plan():
-    workout = PushDay()
-    plan = workout.pushDay()
-    plan_message = "\n".join([f"{key}: {value}" for key, value in plan.items()])
-    return plan_message
-
-
-def get_shoulders_day_plan():
-    workout = Shoulders()
-    plan = workout.shoulderDay()
-    plan_message = "\n".join([f"{key}: {value}" for key, value in plan.items()])
-    return plan_message
+    today, workout_plan = get_todays_workout()
+    return render_template('end_of_day.html', today=today, workout_plan=workout_plan)
 
 
 if __name__ == "__main__":
